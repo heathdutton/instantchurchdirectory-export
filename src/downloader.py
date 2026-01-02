@@ -5,11 +5,12 @@ import os
 import hashlib
 from pathlib import Path
 from urllib.parse import urlparse
+from typing import List, Dict, Optional
 import aiohttp
 import aiofiles
 
 
-async def download_asset(url: str, destination_dir: str, session: aiohttp.ClientSession = None) -> str:
+async def download_asset(url: str, destination_dir: str, session: Optional[aiohttp.ClientSession] = None) -> str:
     """
     Download an asset from a URL to the destination directory.
     Uses SHA-256 hash of URL for deduplication.
@@ -80,7 +81,7 @@ async def download_asset(url: str, destination_dir: str, session: aiohttp.Client
     return ""
 
 
-async def download_assets_batch(urls: list[str], destination_dir: str) -> dict[str, str]:
+async def download_assets_batch(urls: List[str], destination_dir: str) -> Dict[str, str]:
     """
     Download multiple assets in parallel.
 

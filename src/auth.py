@@ -2,6 +2,7 @@
 Authentication module for Instant Church Directory
 """
 import os
+from typing import Tuple
 from dotenv import load_dotenv
 from playwright.async_api import async_playwright, Page, Browser
 
@@ -13,7 +14,7 @@ class AuthenticationError(Exception):
     pass
 
 
-async def get_authenticated_page() -> tuple[Page, Browser]:
+async def get_authenticated_page() -> Tuple[Page, Browser]:
     """
     Authenticate with Instant Church Directory and return authenticated page.
 
@@ -41,41 +42,60 @@ async def get_authenticated_page() -> tuple[Page, Browser]:
         print(f"Navigating to login page...")
         await page.goto('https://members.instantchurchdirectory.com/')
 
-        # Wait for login form to load
+        # Step 1: Enter email
+        print(f"Entering email: {username}...")
         await page.wait_for_selector('input[type="email"], input[type="text"]', timeout=10000)
 
-        print(f"Logging in as {username}...")
-        # Fill in credentials
         email_input = await page.query_selector('input[type="email"], input[type="text"]')
-        if email_input:
-            await email_input.fill(username)
+        if not email_input:
+            raise AuthenticationError("Could not find email input field")
 
-        password_input = await page.query_selector('input[type="password"]')
-        if password_input:
-            await password_input.fill(password)
+        await email_input.fill(username)
 
-        # Submit the form
-        submit_button = await page.query_selector('button[type="submit"], input[type="submit"]')
+        # Click submit or press Enter to go to password page
+        submit_button = await page.query_selector('button[type="submit"], input[type="submit"], button:has-text("Sign In"), button:has-text("Continue")')
         if submit_button:
             await submit_button.click()
         else:
-            # Try pressing Enter on the password field
-            await page.press('input[type="password"]', 'Enter')
+            await email_input.press('Enter')
+
+        # Wait for password page to load
+        print("Waiting for password page...")
+        await page.wait_for_selector('input[type="password"]', timeout=10000)
+
+        # Step 2: Enter password
+        print("Entering password...")
+        password_input = await page.query_selector('input[type="password"]')
+        if not password_input:
+            raise AuthenticationError("Could not find password input field")
+
+        await password_input.fill(password)
+
+        # Submit password form
+        submit_button = await page.query_selector('button[type="submit"], input[type="submit"], button:has-text("Sign In")')
+        if submit_button:
+            await submit_button.click()
+        else:
+            await password_input.press('Enter')
 
         # Wait for navigation after login
+        print("Waiting for login to complete...")
         await page.wait_for_load_state('networkidle', timeout=15000)
 
-        # Verify login success by checking if we're still on the login page
+        # Give it a moment to fully load
+        await page.wait_for_timeout(2000)
+
+        # Verify login success by checking if we're NOT on sign-in page
         current_url = page.url
-        if 'login' in current_url.lower() or current_url == 'https://members.instantchurchdirectory.com/':
+        if 'signin' in current_url.lower() or 'login' in current_url.lower():
             # Check for error messages
             error_element = await page.query_selector('.error, .alert, [role="alert"]')
             if error_element:
                 error_text = await error_element.inner_text()
                 raise AuthenticationError(f"Login failed: {error_text}")
-            raise AuthenticationError("Login failed: Still on login page")
+            raise AuthenticationError(f"Login failed: Still on sign-in page ({current_url})")
 
-        print("Authentication successful!")
+        print(f"Authentication successful! Logged in to: {current_url}")
         return page, browser
 
     except Exception as e:

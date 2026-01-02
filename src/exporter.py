@@ -5,12 +5,12 @@ import json
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Union, List, Dict
 
 
 async def export_to_json(
     category: str,
-    data: list | dict,
+    data: Union[List, Dict],
     base_dir: str = "exports"
 ) -> str:
     """
