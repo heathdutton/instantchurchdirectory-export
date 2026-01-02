@@ -21,93 +21,69 @@ async def scrape_staff(page: Page) -> List[Dict[str, Any]]:
     staff = []
 
     try:
-        # Try to navigate to staff section
-        # Common patterns: /staff, /leaders, /ministry
-        staff_urls = [
-            'https://members.instantchurchdirectory.com/staff',
-            'https://members.instantchurchdirectory.com/leaders',
-            'https://members.instantchurchdirectory.com/ministry'
-        ]
-
-        page_loaded = False
-        for url in staff_urls:
-            try:
-                await page.goto(url, timeout=10000)
-                await page.wait_for_load_state('networkidle', timeout=5000)
-                page_loaded = True
-                break
-            except:
-                continue
-
-        if not page_loaded:
-            print("  Staff page not found, skipping...")
+        # Extract directory ID from current URL
+        current_url = page.url
+        match = re.search(r'/([a-f0-9-]{36})', current_url)
+        if not match:
+            print("  Warning: Could not determine directory ID")
             return staff
 
+        directory_id = match.group(1)
+        staff_url = f'https://members.instantchurchdirectory.com/staff/{directory_id}'
+
+        print(f"  Navigating to {staff_url}")
+        await page.goto(staff_url, timeout=15000)
+        await page.wait_for_load_state('networkidle', timeout=10000)
         await page.wait_for_timeout(2000)
 
-        # Find staff elements
-        staff_elements = await page.query_selector_all('.staff, .leader, .ministry, [class*="staff"], [class*="leader"]')
+        # Find staff list items (likely uses same selector as families)
+        staff_elements = await page.query_selector_all('.js-icd-members-family-list-item')
 
-        if not staff_elements:
-            staff_elements = await page.query_selector_all('article, .card, [role="article"]')
-
-        print(f"  Found {len(staff_elements)} potential staff elements")
+        print(f"  Found {len(staff_elements)} staff elements")
 
         for idx, element in enumerate(staff_elements):
             try:
-                staff_data = {
-                    "id": f"staff_{str(idx + 1).zfill(3)}",
-                    "name": "",
-                    "title": "",
-                    "email": "",
-                    "phone": "",
-                    "bio": "",
-                    "photo": ""
-                }
-
+                # Extract staff name and info from text content
                 text_content = await element.inner_text()
+                lines = [line.strip() for line in text_content.split('\n') if line.strip()]
 
-                # Extract name
-                name_elem = await element.query_selector('h1, h2, h3, h4, .name, [class*="name"]')
-                if name_elem:
-                    staff_data["name"] = (await name_elem.inner_text()).strip()
-                else:
-                    lines = text_content.split('\n')
-                    if lines:
-                        staff_data["name"] = lines[0].strip()
+                staff_name = lines[0] if lines else f"Staff {idx + 1}"
+                title = lines[1] if len(lines) > 1 else ""
 
-                # Extract title
-                title_elem = await element.query_selector('.title, .position, .role, [class*="title"], [class*="position"]')
-                if title_elem:
-                    staff_data["title"] = (await title_elem.inner_text()).strip()
-
-                # Extract photo
+                # Get photo
                 img_elem = await element.query_selector('img')
+                photo_url = ""
                 if img_elem:
-                    photo_url = await img_elem.get_attribute('src')
-                    if photo_url and not photo_url.startswith('data:'):
-                        if photo_url.startswith('//'):
-                            photo_url = 'https:' + photo_url
-                        elif photo_url.startswith('/'):
-                            photo_url = 'https://members.instantchurchdirectory.com' + photo_url
-                        staff_data["photo"] = photo_url
+                    src = await img_elem.get_attribute('src')
+                    if src and not src.startswith('data:'):
+                        if src.startswith('//'):
+                            photo_url = 'https:' + src
+                        elif src.startswith('/'):
+                            photo_url = 'https://members.instantchurchdirectory.com' + src
+                        else:
+                            photo_url = src
 
-                # Extract contact info
+                # Extract contact info from text
+                email = ""
+                phone = ""
                 email_match = re.search(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', text_content)
                 if email_match:
-                    staff_data["email"] = email_match.group()
+                    email = email_match.group()
 
                 phone_match = re.search(r'\b(?:\+?1[-.]?)?\(?([0-9]{3})\)?[-.]?([0-9]{3})[-.]?([0-9]{4})\b', text_content)
                 if phone_match:
-                    staff_data["phone"] = phone_match.group()
+                    phone = phone_match.group()
 
-                # Extract bio (longer text content)
-                bio_elem = await element.query_selector('.bio, .description, p, [class*="bio"]')
-                if bio_elem:
-                    staff_data["bio"] = (await bio_elem.inner_text()).strip()
+                staff_data = {
+                    "id": f"staff_{str(idx + 1).zfill(3)}",
+                    "name": staff_name,
+                    "title": title,
+                    "email": email,
+                    "phone": phone,
+                    "photo": photo_url
+                }
 
-                if staff_data["name"]:
-                    staff.append(staff_data)
+                staff.append(staff_data)
 
             except Exception as e:
                 print(f"  Warning: Error processing staff element {idx}: {str(e)}")
@@ -117,5 +93,7 @@ async def scrape_staff(page: Page) -> List[Dict[str, Any]]:
 
     except Exception as e:
         print(f"  Error scraping staff: {str(e)}")
+        import traceback
+        traceback.print_exc()
 
     return staff
