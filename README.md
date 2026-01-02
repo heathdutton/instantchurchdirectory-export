@@ -19,7 +19,7 @@ A minimalistic Python scraper for [Instant Church Directory](https://members.ins
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/instantchurchdirectory-export.git
+git clone https://github.com/heathdutton/instantchurchdirectory-export.git
 cd instantchurchdirectory-export
 ```
 
